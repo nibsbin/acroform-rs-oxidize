@@ -1,0 +1,11 @@
+target/
+**/*.rs.bk
+**/*.orig
+**/perf.data
+**/perf.data.old
+
+!.travis.yml
+
+/fonts
+
+**/.DS_Store
