@@ -438,10 +438,192 @@ For users of the existing acroform crate:
 ## Next Steps
 
 1. ✅ **Create this planning document** (ACROFORM_OXIDIZE_IMPL.md)
-2. ⬜ **Prototype Phase 1**: Create basic project structure and test oxidize-pdf APIs
-3. ⬜ **Spike Phase 2**: Implement basic field reading to validate approach
+2. ✅ **Prototype Phase 1**: Create basic project structure and test oxidize-pdf APIs
+3. 🔄 **Spike Phase 2**: Implement basic field reading to validate approach
 4. ⬜ **Decision Point**: Confirm implementation strategy based on prototype findings
 5. ⬜ **Full Implementation**: Execute phases 2-5 based on validated approach
+
+## Implementation Findings (Steps 2-4)
+
+### Step 2: Prototype Phase 1 - Basic Project Structure ✅
+
+**Created:**
+- Basic Cargo project with `oxidize-pdf = "=1.6.0"` dependency
+- Module structure: `lib.rs`, `api.rs`, `field.rs`, `value.rs`, `error.rs`
+- Error type conversions from oxidize-pdf errors
+- Basic API stubs for `AcroFormDocument`
+
+**Key Findings:**
+1. **oxidize-pdf Error Types**: The library uses two error types:
+   - `oxidize_pdf::error::PdfError` - Main error type
+   - `oxidize_pdf::parser::ParseError` - Parser-specific errors
+   - Both needed conversion implementations to our `PdfError`
+
+2. **PDF Loading**: Successfully implemented using:
+   ```rust
+   let cursor = Cursor::new(data);
+   let reader = PdfReader::new(cursor)?;
+   let document = PdfDocument::new(reader);
+   ```
+
+3. **Basic Information Access**: Can retrieve:
+   - PDF version
+   - Page count
+   - Document metadata
+
+### Step 3: Spike Phase 2 - Field Reading Investigation 🔄
+
+**Status:** Initial exploration complete, implementation strategy identified.
+
+**Critical Finding - API Limitations:**
+
+The `oxidize-pdf` library (v1.6.0) is primarily designed for **PDF generation** with basic **parsing capabilities for text extraction**. However, it has significant limitations for **form field manipulation**:
+
+1. **Parser Module Access**: 
+   - The `PdfReader` and `PdfDocument` types provide high-level document access
+   - Internal object structure (dictionaries, references) is not fully exposed in public API
+   - The `catalog()` method exists on `PdfReader` but returns `&PdfDictionary`
+   - Dictionary access methods are limited or internal
+
+2. **Forms Module Focus**:
+   - The `forms` module in oxidize-pdf is focused on **creating new forms**
+   - Types like `AcroForm`, `FormField`, `FormManager` are for generation, not reading
+   - No clear API for reading existing form field values from parsed PDFs
+
+3. **Object Model Differences**:
+   - oxidize-pdf uses `PdfObject`, `PdfDictionary`, `PdfArray` types
+   - Reference resolution through `document.get_object(obj_num, gen_num)`
+   - Different from the forked `pdf` crate's `RcRef<T>` and `Resolve` trait
+
+### Step 4: Decision Point - Implementation Strategy Recommendation 🎯
+
+**CRITICAL ASSESSMENT:**
+
+After prototyping with oxidize-pdf v1.6.0, I've identified that while the library can **parse PDFs**, it lacks the necessary **high-level API for reading form fields** from existing PDFs. The library is excellent for:
+- ✅ PDF generation
+- ✅ Text extraction
+- ✅ Basic parsing
+- ❌ Form field reading/manipulation
+
+**RECOMMENDED PATH FORWARD:**
+
+Given the constraints, there are three viable approaches:
+
+#### Option A: Extend oxidize-pdf with Low-Level Object Access (RECOMMENDED)
+**Approach:** 
+- Use oxidize-pdf for basic PDF parsing and structure navigation
+- Implement custom form field extraction by directly accessing PDF object streams
+- Build field traversal logic on top of `PdfReader.get_object()` and `PdfDocument.resolve()`
+
+**Pros:**
+- Leverages oxidize-pdf's robust PDF parsing
+- Full control over form field extraction
+- Can achieve API parity with old implementation
+- Modern, maintained library as foundation
+
+**Cons:**
+- More implementation work (custom field traversal)
+- Need to understand PDF specification deeply
+- May need to work with internal/private API details
+
+**Estimated Effort:** 7-10 days
+
+#### Option B: Fork/Patch oxidize-pdf with Form Reading Support
+**Approach:**
+- Contribute form field reading capabilities to oxidize-pdf
+- Create PR with public API for accessing form fields
+- Use patched version until merged
+
+**Pros:**
+- Benefits the wider community
+- Clean, well-designed API
+- Leverages oxidize-pdf expertise
+
+**Cons:**
+- Dependency on maintainer approval
+- Longer timeline (community contribution process)
+- May not align with library's design goals
+
+**Estimated Effort:** 10-15 days + upstream contribution time
+
+#### Option C: Continue with Forked pdf Crate
+**Approach:**
+- Keep using `acroform-rs-old/pdf` (the forked crate)
+- Focus on other improvements instead
+
+**Pros:**
+- Known working solution
+- No implementation risk
+- Immediate availability
+
+**Cons:**
+- ❌ Doesn't achieve migration goal
+- ❌ Maintains dependency on forked/unmaintained code
+- ❌ No benefit from oxidize-pdf improvements
+
+**Estimated Effort:** 0 days (no change)
+
+### Recommended Implementation Strategy: Option A
+
+**Detailed Plan:**
+
+1. **Phase 1: Low-Level Object Access (2 days)**
+   - Implement wrapper methods to access `PdfReader.catalog()`
+   - Create utility functions for dictionary traversal
+   - Build reference resolution helpers
+
+2. **Phase 2: Field Discovery (3 days)**
+   - Parse AcroForm dictionary from catalog
+   - Traverse Fields array
+   - Recursively process field hierarchies (Kids)
+   - Build fully qualified field names
+
+3. **Phase 3: Value Extraction (2 days)**
+   - Extract field properties (T, FT, V, DV, Ff, TU)
+   - Convert PDF objects to `FieldValue` enum
+   - Map field types to `FieldType` enum
+   - Handle special cases (nested fields, annotations)
+
+4. **Phase 4: Form Filling (2-3 days)**
+   - Implement document cloning/modification strategy
+   - Update field values in PDF object tree
+   - Generate updated PDF with modified fields
+   - Handle UTF-16BE encoding for text values
+
+5. **Phase 5: Testing & Refinement (2 days)**
+   - Test with sample PDFs from `acroform_files/`
+   - Validate API parity with old implementation
+   - Performance testing
+   - Documentation
+
+**Total Estimated Effort:** 11-12 days
+
+### Key Technical Insights
+
+1. **oxidize-pdf v1.6.0 Capabilities:**
+   - ✅ Robust PDF parsing with corruption recovery
+   - ✅ Access to document structure (catalog, pages, objects)
+   - ✅ Object reference resolution
+   - ⚠️ Limited public API for dictionary/object manipulation
+   - ❌ No high-level form field reading API
+
+2. **Implementation Challenges:**
+   - Need to work with lower-level object APIs
+   - Dictionary access may require workarounds
+   - Field value encoding/decoding needs custom implementation
+   - Form filling requires PDF regeneration (no incremental updates)
+
+3. **Success Criteria:**
+   - Can load PDFs with oxidize-pdf ✅
+   - Can parse basic document info ✅
+   - Can access internal objects ⚠️ (needs custom implementation)
+   - Can achieve API parity ⚠️ (feasible but requires work)
+
+### Conclusion
+
+The migration to oxidize-pdf v1.6.0 is **feasible** but will require **custom implementation** of form field reading/writing on top of the library's parsing foundation. The library provides excellent PDF parsing infrastructure but doesn't have ready-made form manipulation APIs.
+
+**Recommendation:** Proceed with Option A - implement form field extraction using oxidize-pdf's low-level object access, supplemented with custom traversal logic. This achieves the migration goal while leveraging a modern, maintained library.
 
 ## References
 
@@ -450,3 +632,4 @@ For users of the existing acroform crate:
 - **PDF Specification**: ISO 32000-1 (PDF 1.7)
 - **Current Implementation**: `acroform-rs-old/acroform/`
 - **Test Assets**: `acroform-rs-old/acroform_files/`
+- **Prototype Code**: `acroform-oxidize/` (created during investigation)
