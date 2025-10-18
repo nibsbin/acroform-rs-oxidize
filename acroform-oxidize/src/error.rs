@@ -47,3 +47,9 @@ impl From<oxidize_pdf::error::PdfError> for PdfError {
         PdfError::ParseError(err.to_string())
     }
 }
+
+impl From<oxidize_pdf::parser::ParseError> for PdfError {
+    fn from(err: oxidize_pdf::parser::ParseError) -> Self {
+        PdfError::ParseError(err.to_string())
+    }
+}

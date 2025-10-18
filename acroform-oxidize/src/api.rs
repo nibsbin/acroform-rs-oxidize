@@ -1,7 +1,9 @@
 use crate::error::PdfError;
 use crate::field::FormField;
 use crate::value::FieldValue;
+use oxidize_pdf::parser::{PdfDocument, PdfReader};
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::Path;
 
 /// Main API for working with PDF forms
@@ -28,8 +30,10 @@ use std::path::Path;
 /// doc.fill_and_save(values, "filled.pdf").unwrap();
 /// ```
 pub struct AcroFormDocument {
-    // Internal PDF representation - to be implemented
+    // Internal PDF representation
     data: Vec<u8>,
+    // Parsed document for reading
+    document: PdfDocument<Cursor<Vec<u8>>>,
 }
 
 impl AcroFormDocument {
@@ -79,8 +83,12 @@ impl AcroFormDocument {
     /// let doc = AcroFormDocument::from_bytes(data).unwrap();
     /// ```
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, PdfError> {
-        // TODO: Validate PDF structure using oxidize-pdf
-        Ok(AcroFormDocument { data })
+        // Parse the PDF using oxidize-pdf
+        let cursor = Cursor::new(data.clone());
+        let reader = PdfReader::new(cursor)?;
+        let document = PdfDocument::new(reader);
+        
+        Ok(AcroFormDocument { data, document })
     }
     
     /// Get all form fields in the PDF
