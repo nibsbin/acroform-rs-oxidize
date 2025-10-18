@@ -1,0 +1,13 @@
+[package]
+name = "acroform-oxidize"
+version = "0.1.0"
+edition = "2021"
+authors = ["AcroForm Contributors"]
+description = "PDF form manipulation library using oxidize-pdf"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/nibsbin/acroform-rs-oxidize"
+
+[dependencies]
+oxidize-pdf = "=1.6.0"
+
+[dev-dependencies]
